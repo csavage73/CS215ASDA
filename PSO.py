@@ -4,31 +4,31 @@ import numpy as np
 
 # Fixed node positions (x, y) in a logical layout
 nodes = {
-    'A': (0,0), 'B': (3,0), 'C': (0,2),
-    'D': (1,5), 'E': (3,3), 'F': (5,3),
-    'G': (3,6), 'H': (5,7), 'I': (6,9),
-    'J': (6,5), 'K': (9,3), 'L': (10,1),
+    'A': (0,0),  'B': (3,0),  'C': (0,2),
+    'D': (1,5),  'E': (3,3),  'F': (5,3),
+    'G': (3,6),  'H': (5,7),  'I': (6,9),
+    'J': (6,5),  'K': (9,3),  'L': (10,1),
     'M': (11,5), 'N': (12,2), 'O': (6,0), 
-    'P': (6,2), 'Q': (8,7), 'R': (10,10),
-    'S': (15,10), 'T': (14,5), 'U': (16,8),
+    'P': (6,2),  'Q': (8,7),  'R': (10,10),
+    'S': (15,10),'T': (14,5), 'U': (16,8),
     'V': (3,11), 'W': (4,13), 'X': (5,12),
-    'Y': (10,12), 'Z': (7,13)
+    'Y': (10,12),'Z': (7,13)
 }
 
 # Fixed edges with explicit weights (distances)
 edges = [
-    ('A','B',0), ('A','C',0), ('B','C',0), ('B','E',0), ('B','F',0),
-    ('B','O',0), ('C','D',0), ('D','E',0), ('D','G',0), ('D','V',0), 
-    ('E','F',0), ('E','G',0), ('E','H',0), ('E','J',0), ('F','J',0), 
-    ('F','P',0), ('G','H',0), ('G','H',0), ('G','V',0), ('H','I',0), 
-    ('H','J',0), ('I','J',0), ('I','Q',0), ('I','R',0), ('I','V',0), 
-    ('I','X',0), ('I','Y',0), ('J','K',0), ('J','P',0), ('J','Q',0), 
-    ('K','L',0), ('K','M',0), ('K','P',0), ('K','Q',0), ('K','R',0), 
-    ('L','N',0), ('L','O',0), ('M','N',0), ('M','R',0), ('M','S',0), 
-    ('M','T',0), ('N','T',0), ('O','P',0), ('Q','R',0), ('R','S',0), 
-    ('R','Y',0), ('S','T',0), ('S','U',0), ('S','Y',0), ('T','U',0), 
-    ('V','W',0), ('V','X',0), ('W','X',0), ('W','Z',0), ('X','Y',0), 
-    ('X','Z',0), ('Y','Z',0),
+    ('A','B',24), ('A','C',65), ('B','C',34), ('B','E',999), ('B','F',65),
+    ('B','O',13), ('C','D',22), ('D','E',44), ('D','G',54), ('D','V',34),
+    ('E','F',65), ('E','G',99), ('E','H',78), ('E','J',39), ('F','J',54),
+    ('F','P',44), ('G','H',28), ('G','V',73), ('H','I',32), 
+    ('H','J',22), ('I','J',47), ('I','Q',23), ('I','R',54), ('I','V',32),
+    ('I','X',53), ('I','Y',65), ('J','K',2), ('J','P',42), ('J','Q',43),
+    ('K','L',76), ('K','M',98), ('K','P',45), ('K','Q',90), ('K','R',65),
+    ('L','N',1), ('L','O',46), ('M','N',35), ('M','R',14), ('M','S',78),
+    ('M','T',23), ('N','T',67), ('O','P',52), ('Q','R',45), ('R','S',65),
+    ('R','Y',88), ('S','T',98), ('S','U',89), ('S','Y',34), ('T','U',95),
+    ('V','W',21), ('V','X',34), ('W','X',56), ('W','Z',87), ('X','Y',32),
+    ('X','Z',34), ('Y','Z',43)
 ]
 
 G = nx.Graph()
@@ -48,8 +48,15 @@ node_idx  = {n: i for i, n in enumerate(node_list)}
 
 adj = nx.to_dict_of_dicts(G)
 
+MAX_EDGE_WEIGHT = 9.0   # used to normalise edge cost into [0, 1]
+
 def decode_path(priority, source, target):
-    """Greedy path construction driven by priority vector."""
+    """Greedy path construction driven by priority vector and edge cost.
+
+    Selection score = priority[neighbour] - normalised_edge_weight
+    This lets the PSO learn high-priority assignments for cheap-path nodes
+    while the decoder itself also prefers lower-cost edges at each step.
+    """
     path    = [source]
     visited = {source}
     current = source
@@ -57,7 +64,11 @@ def decode_path(priority, source, target):
         neighbors = [nb for nb in adj[current] if nb not in visited]
         if not neighbors:
             return None                 # dead end
-        current = max(neighbors, key=lambda n: priority[node_idx[n]])
+        current = max(
+            neighbors,
+            key=lambda n: priority[node_idx[n]]
+                          - adj[current][n]['weight'] / MAX_EDGE_WEIGHT
+        )
         path.append(current)
         visited.add(current)
         if len(path) > n_nodes:         # cycle guard
@@ -65,19 +76,20 @@ def decode_path(priority, source, target):
     return path
 
 def path_cost(path):
-    return sum(adj[path[i]][path[i+1]] for i in range(len(path) - 1))
+    return sum(adj[path[i]][path[i+1]]['weight'] for i in range(len(path) - 1))
 
 def fitness(priority, source, target):
     path = decode_path(priority, source, target)
     return path_cost(path) if path else float('inf')
 
 # ── Hyper-parameters ──
-NUM_PARTICLES = 40
-MAX_ITER      = 200
-W             = 0.6   # inertia weight
+NUM_PARTICLES = 100
+MAX_ITER      = 1000
+W_MAX         = 0.9   # inertia weight – starts high (exploration)
+W_MIN         = 0.4   #                – decays to this (exploitation)
 C1            = 1.5   # cognitive (personal best) coefficient
 C2            = 1.5   # social (global best) coefficient
-V_MAX         = 0.3   # velocity clamp
+V_MAX         = 0.5   # velocity clamp
 
 np.random.seed(42)
 positions  = np.random.uniform(0, 1, (NUM_PARTICLES, n_nodes))
@@ -93,6 +105,7 @@ gbest_score = pbest_scores[gbest_idx]
 history = []   # track best cost per iteration
 
 for iteration in range(MAX_ITER):
+    W = W_MAX - (W_MAX - W_MIN) * iteration / MAX_ITER   # linearly decay inertia
     for i in range(NUM_PARTICLES):
         r1 = np.random.rand(n_nodes)
         r2 = np.random.rand(n_nodes)
@@ -144,7 +157,7 @@ nx.draw_networkx_edges(G, nodes, edgelist=path_edges,
 nx.draw_networkx_nodes(G, nodes, nodelist=[SOURCE, TARGET],
                        node_size=650, node_color='#E84545', ax=ax_graph)
 
-edge_labels = {(u, v): f"{adj[u][v]:.1f}" for u, v in path_edges}
+edge_labels = {(u, v): f"{adj[u][v]['weight']:.1f}" for u, v in path_edges}
 nx.draw_networkx_edge_labels(G, nodes, edge_labels=edge_labels,
                              font_size=7, ax=ax_graph)
 
