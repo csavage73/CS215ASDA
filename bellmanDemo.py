@@ -48,14 +48,14 @@ def generate_spread_out_positions(num_nodes, width, height, min_dist, seed=None)
     return positions
 
 
-def edge_weight(congestion_chance=23):
+def edge_weight(congestion_chance):
     # Congested = high weight (avoided), not congested = low weight (preferred)
     if random.randint(0, 99) < congestion_chance:
         return random.randint(10, 20)   # congested
     return random.randint(1, 5)         # not congested
 
 
-def generate_random_map(num_nodes=500, width=600, height=400, extra_edges=100, min_dist=5, seed=42):
+def generate_random_map(num_nodes=500, width=600, height=400, extra_edges=100, min_dist=5, seed=42, congestion_chance=30):
     positions = generate_spread_out_positions(num_nodes, width, height, min_dist, seed)
     G = nx.Graph()
 
@@ -79,7 +79,7 @@ def generate_random_map(num_nodes=500, width=600, height=400, extra_edges=100, m
                     best_pair = (u, v)
 
         u, v = best_pair
-        G.add_edge(u, v, weight=edge_weight())
+        G.add_edge(u, v, weight=edge_weight(congestion_chance))
         connected.add(v)
         unconnected.remove(v)
 
@@ -99,7 +99,7 @@ def generate_random_map(num_nodes=500, width=600, height=400, extra_edges=100, m
     for dist, u, v in possible_edges:
         if added >= extra_edges:
             break
-        G.add_edge(u, v, weight=edge_weight())
+        G.add_edge(u, v, weight=edge_weight(congestion_chance))
         added += 1
 
     # Step 3: Ensure every node has at least degree 2
@@ -120,7 +120,7 @@ def generate_random_map(num_nodes=500, width=600, height=400, extra_edges=100, m
                     break
 
                 _, nearest = candidates[0]
-                G.add_edge(node, nearest, weight=edge_weight())
+                G.add_edge(node, nearest, weight=edge_weight(congestion_chance))
                 changed = True
 
     return G, positions
@@ -215,12 +215,12 @@ def draw_graph_with_path(G, positions, path, source, target, cost):
 
 if __name__ == "__main__":
     CONGESTION_CHANCE = 23  # % chance an edge is congested (high weight). Change this value.
-    NUM_NODES = 100         # Number of nodes in the graph
+    NUM_NODES = 200         # Number of nodes in the graph
 
     # --- Static graph (same layout every run) ---
-    #SEED = 42
+    SEED = 42
     # --- Dynamic graph (different layout every run) --- uncomment the line below and comment out the line above
-    SEED = random.randint(0, 999999)
+    #SEED = random.randint(0, 999999)
 
     G, positions = generate_random_map(
         num_nodes=NUM_NODES,
@@ -230,6 +230,8 @@ if __name__ == "__main__":
         min_dist=5,
         seed=SEED      
     )
+
+    print(f"Total nodes: {G.number_of_nodes()}")
 
     graph_dict = nx_to_adj_dict(G)
 
