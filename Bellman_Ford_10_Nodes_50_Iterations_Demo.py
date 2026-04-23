@@ -6,6 +6,13 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import tracemalloc
 
+CONGESTION_CHANCE = 23 # % chance an edge is congested (high weight). Change this value.
+NUM_NODES = 10       # Number of nodes in the graph
+rounds = 50         # Number of iterations. 
+# --- Static graph (same layout every run) ---
+#SEED = 42
+# --- Dynamic graph (different layout every run) --- uncomment the line below and comment out the line above
+rand_seed = True
 
 
 
@@ -286,17 +293,7 @@ def draw_graph_with_path(G, positions, path, source, target, cost):
 
 
 if __name__ == "__main__":
-    CONGESTION_CHANCE = 23  # % chance an edge is congested (high weight). Change this value.
-    NUM_NODES = 10         # Number of nodes in the graph
-    rounds = 50         # Number of iterations. 
-    # --- Static graph (same layout every run) ---
-    #SEED = 42
-    # --- Dynamic graph (different layout every run) --- uncomment the line below and comment out the line above
-    SEED = random.randint(0, 999999)
-
-
     
-
     SOURCE = "N01"            #starting node
     TARGET = f"N{NUM_NODES:02}" #end node
     path = []
@@ -307,12 +304,10 @@ if __name__ == "__main__":
     totalSum = 0
     
     while i < rounds:
-        if i == rounds * 0.25:
-            print("Loading 25%")
-        elif i == rounds * 0.5:
-            print("Loading 50%")
-        elif i == rounds * 0.75:
-            print("Loading 75%")
+        if rand_seed == True:
+            SEED = random.randint(0,99999)
+        tracking = (i/rounds) * 100
+        print(f"Tracking Iteration: {tracking}")
 
         G, positions = generate_random_map(
             num_nodes=NUM_NODES,
